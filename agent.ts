@@ -19,27 +19,7 @@ if (!process.env.ANTHROPIC_API_KEY || !process.env.LIT_LANGCHAIN_PRIVATE_KEY) {
   throw new Error("Missing required environment variables. Check .env file");
 }
 
-// Define the tools for the agent to use
-// Define the tools for the agent to use
-const weatherTool = tool(
-  async ({ query }) => {
-    // This is a placeholder for the actual implementation
-    if (
-      query.toLowerCase().includes("sf") ||
-      query.toLowerCase().includes("san francisco")
-    ) {
-      return "It's 60 degrees and foggy.";
-    }
-    return "It's 90 degrees and sunny.";
-  },
-  {
-    name: "weather",
-    description: "Call to get the current weather for a location.",
-    schema: z.object({
-      query: z.string().describe("The query to use in your search."),
-    }),
-  }
-);
+// define the tools for the agent to use
 const litToolkit = await LitToolkit.create({
   litNetwork: LIT_NETWORK.DatilDev,
   litPrivateKey: process.env.LIT_LANGCHAIN_PRIVATE_KEY,
