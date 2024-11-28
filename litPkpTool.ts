@@ -104,7 +104,7 @@ export class LitPkpTool extends StructuredTool {
         scopes: [AUTH_METHOD_SCOPE.SignAnything],
       });
 
-      return JSON.stringify(mintInfo);
+      return JSON.stringify(mintInfo.pkp);
     } catch (error) {
       console.error("Error minting PKP", error);
       return "Error minting PKP";
