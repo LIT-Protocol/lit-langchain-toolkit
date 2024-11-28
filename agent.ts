@@ -5,14 +5,17 @@ dotenv.config();
 
 import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
 import { ChatAnthropic } from "@langchain/anthropic";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation } from "@langchain/langgraph";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { Lit } from "./lit.js";
+import { LIT_NETWORK } from "@lit-protocol/constants";
+import * as readline from "readline/promises";
 
 // Add validation for required environment variables
-if (!process.env.ANTHROPIC_API_KEY || !process.env.TAVILY_API_KEY) {
+if (!process.env.ANTHROPIC_API_KEY || !process.env.LIT_LANGCHAIN_PRIVATE_KEY) {
   throw new Error("Missing required environment variables. Check .env file");
 }
 
@@ -37,7 +40,13 @@ const weatherTool = tool(
     }),
   }
 );
-const tools = [new TavilySearchResults({ maxResults: 3 }), weatherTool];
+const tools = [
+  weatherTool,
+  new Lit({
+    litNetwork: LIT_NETWORK.DatilDev,
+    litPrivateKey: process.env.LIT_LANGCHAIN_PRIVATE_KEY,
+  }),
+];
 const toolNode = new ToolNode(tools);
 
 // Create a model and give it access to the tools
@@ -84,20 +93,32 @@ const app = workflow.compile();
 // Main execution function
 async function main() {
   try {
-    // Use the agent
-    const finalState = await app.invoke({
-      messages: [new HumanMessage("what is the weather in sf")],
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
     });
-    console.log(finalState.messages[finalState.messages.length - 1].content);
 
-    const nextState = await app.invoke({
-      // Including the messages from the previous run gives the LLM context.
-      // This way it knows we're asking about the weather in NY
-      messages: [...finalState.messages, new HumanMessage("what about ny")],
-    });
-    console.log(nextState.messages[nextState.messages.length - 1].content);
+    console.log("Starting chat (Press Ctrl+C to exit)...");
+
+    let prevState: typeof MessagesAnnotation.State | null = null;
+    while (true) {
+      const input = await rl.question("\nYou: ");
+      if (!input) continue;
+
+      prevState = await app.invoke({
+        messages: [...(prevState?.messages || []), new HumanMessage(input)],
+      });
+      const lastMessage = prevState?.messages[prevState.messages.length - 1];
+      if (lastMessage && lastMessage instanceof AIMessage) {
+        console.log("\nAssistant:", lastMessage.content);
+      }
+    }
   } catch (error) {
-    console.error("Error:", error);
+    if (error instanceof Error && error.message.includes("SIGINT")) {
+      console.log("\nGoodbye!");
+    } else {
+      console.error("Error:", error);
+    }
   }
 }
 
