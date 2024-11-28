@@ -1,8 +1,9 @@
 import { type ToolInterface, BaseToolkit } from "@langchain/core/tools";
-import { LitSignerTool } from "./litSignerTool.js";
 import { type ToolParams } from "@langchain/core/tools";
 import { LIT_NETWORK_VALUES, LIT_NETWORK } from "@lit-protocol/constants";
 import { LitNodeClient } from "@lit-protocol/lit-node-client";
+import { LitSignerTool } from "./litSignerTool.js";
+import { LitPkpTool } from "./litPkpTool.js";
 
 /**
  * Options for the Lit tools.
@@ -11,6 +12,7 @@ export type LitFields = ToolParams & {
   litPrivateKey: string;
   litNetwork?: LIT_NETWORK_VALUES;
   litNodeClient?: LitNodeClient;
+  debug?: boolean;
 };
 
 /**
@@ -31,22 +33,29 @@ export class LitToolkit extends BaseToolkit {
   protected litPrivateKey?: string;
   protected litNetwork?: LIT_NETWORK_VALUES;
   protected litNodeClient?: LitNodeClient;
+  protected debug: boolean;
 
   constructor(public litFields: LitFields) {
     super();
     this.litPrivateKey = litFields.litPrivateKey;
     this.litNetwork = litFields.litNetwork ?? LIT_NETWORK.DatilDev;
     this.litNodeClient = litFields.litNodeClient;
+    this.debug = litFields.debug ?? false;
     this.tools = [
       new LitSignerTool({
         litPrivateKey: this.litPrivateKey,
         litNetwork: this.litNetwork,
         litNodeClient: this.litNodeClient,
+        debug: this.debug,
+      }),
+      new LitPkpTool({
+        litPrivateKey: this.litPrivateKey,
+        litNetwork: this.litNetwork,
+        litNodeClient: this.litNodeClient,
+        debug: this.debug,
       }),
     ];
   }
-
-  async mintPkp() {}
 
   static async create(litFields: LitFields): Promise<LitToolkit> {
     if (!litFields.litPrivateKey) {
@@ -60,6 +69,7 @@ export class LitToolkit extends BaseToolkit {
     if (!litFields.litNodeClient) {
       litFields.litNodeClient = new LitNodeClient({
         litNetwork: litFields.litNetwork,
+        debug: litFields.debug,
       });
     }
     if (!litFields.litNodeClient.ready) {

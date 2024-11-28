@@ -1,9 +1,15 @@
 import { CallbackManagerForToolRun } from "@langchain/core/callbacks/manager";
 import { StructuredTool, type ToolParams } from "@langchain/core/tools";
 import { LitNodeClient } from "@lit-protocol/lit-node-client";
-import { LIT_NETWORK_VALUES, LIT_NETWORK } from "@lit-protocol/constants";
+import {
+  LIT_NETWORK_VALUES,
+  LIT_NETWORK,
+  LIT_RPC,
+} from "@lit-protocol/constants";
 import { type LitFields } from "./litToolkit.js";
+import { getSessionSigs } from "./utils.js";
 import { z } from "zod";
+import ethers from "ethers";
 
 /**
  * Tavily search API tool integration.
@@ -79,14 +85,16 @@ export class LitSignerTool extends StructuredTool {
   description =
     "Can sign a message or transaction using ECDSA secp256k1 with Lit Protocol";
 
-  name = "lit";
+  name = "LitPKPSigner";
 
-  protected litPrivateKey?: string;
+  protected litPrivateKey: string;
   protected litNetwork?: LIT_NETWORK_VALUES;
   protected litNodeClient?: LitNodeClient;
+  protected signer: ethers.Wallet;
+  protected debug: boolean;
 
   schema = z.object({
-    input: z.string().describe("The message or transaction to sign"),
+    toSign: z.string().describe("The message or transaction to sign"),
     litPkpPublicKey: z
       .string()
       .describe("The public key of the PKP to use for signing"),
@@ -94,29 +102,49 @@ export class LitSignerTool extends StructuredTool {
 
   constructor(fields?: LitFields) {
     super(fields);
-    this.litPrivateKey = fields?.litPrivateKey;
+    this.litPrivateKey = fields?.litPrivateKey!;
     this.litNetwork = fields?.litNetwork || LIT_NETWORK.DatilDev;
     this.litNodeClient = fields?.litNodeClient;
+    this.debug = fields?.debug ?? false;
+    this.signer = new ethers.Wallet(
+      this.litPrivateKey,
+      new ethers.providers.JsonRpcProvider(LIT_RPC.CHRONICLE_YELLOWSTONE)
+    );
   }
 
   protected async _call(
     input: z.infer<typeof this.schema>,
     _runManager?: CallbackManagerForToolRun
   ): Promise<string> {
-    // do something with lit
-    return JSON.stringify({
-      signedData: input.input,
-      litPkpPublicKey: input.litPkpPublicKey,
-      signature:
-        "0x473b31ac5e3aa07c57d6bd968bd62fb119ea349d677f9339a97d4dce39d43feb",
-    });
-    //   throw new Error(
-    //     `Request failed with status code ${response.status}: ${json.error}`
-    //   );
-    // }
-    // if (!Array.isArray(json.results)) {
-    //   throw new Error(`Could not parse Tavily results. Please try again.`);
-    // }
-    // return JSON.stringify(json.results);
+    try {
+      // sign with the PKP
+      const toSign = input.toSign;
+      // Add 0x prefix if not present
+      const prefixedToSign = toSign.startsWith("0x") ? toSign : `0x${toSign}`;
+
+      // Check if it's a 32 byte hex string (64 characters + 0x prefix = 66 chars)
+      const is32ByteHex = /^0x[0-9a-fA-F]{64}$/.test(prefixedToSign);
+
+      // If not 32 bytes, hash it
+      const finalToSign = is32ByteHex
+        ? prefixedToSign
+        : ethers.utils.keccak256(ethers.utils.toUtf8Bytes(toSign));
+
+      const sessionSigs = await getSessionSigs(
+        this.litNodeClient!,
+        this.signer
+      );
+
+      const signingResult = await this.litNodeClient!.pkpSign({
+        pubKey: input.litPkpPublicKey,
+        sessionSigs,
+        toSign: ethers.utils.arrayify(finalToSign),
+      });
+
+      return JSON.stringify({ signature: signingResult });
+    } catch (error) {
+      console.error(error);
+      return "Error signing message";
+    }
   }
 }

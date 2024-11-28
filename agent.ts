@@ -56,6 +56,7 @@ const model = new ChatAnthropic({
 // Define the function that determines whether to continue or not
 function shouldContinue({ messages }: typeof MessagesAnnotation.State) {
   const lastMessage = messages[messages.length - 1];
+  //   console.log("lastMessage", lastMessage);
 
   // If the LLM wants to use a tool, then we route to the "tools" node
   if (
