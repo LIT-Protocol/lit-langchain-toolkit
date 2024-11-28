@@ -1,15 +1,9 @@
 import { CallbackManagerForToolRun } from "@langchain/core/callbacks/manager";
-import { Tool, type ToolParams } from "@langchain/core/tools";
+import { StructuredTool, type ToolParams } from "@langchain/core/tools";
 import { LitNodeClient } from "@lit-protocol/lit-node-client";
 import { LIT_NETWORK_VALUES, LIT_NETWORK } from "@lit-protocol/constants";
-
-/**
- * Options for the Lit tool.
- */
-export type LitFields = ToolParams & {
-  litPrivateKey?: string;
-  litNetwork?: LIT_NETWORK_VALUES;
-};
+import { type LitFields } from "./litToolkit.js";
+import { z } from "zod";
 
 /**
  * Tavily search API tool integration.
@@ -77,36 +71,45 @@ export type LitFields = ToolParams & {
  * ```
  * </details>
  */
-export class Lit extends Tool {
+export class LitSignerTool extends StructuredTool {
   static lc_name(): string {
     return "Lit";
   }
 
   description =
-    "A decentralized key management system that can conditionally sign with ecdsa and conditionally decrypt messages.";
+    "Can sign a message or transaction using ECDSA secp256k1 with Lit Protocol";
 
   name = "lit";
 
   protected litPrivateKey?: string;
   protected litNetwork?: LIT_NETWORK_VALUES;
+  protected litNodeClient?: LitNodeClient;
+
+  schema = z.object({
+    input: z.string().describe("The message or transaction to sign"),
+    litPkpPublicKey: z
+      .string()
+      .describe("The public key of the PKP to use for signing"),
+  });
 
   constructor(fields?: LitFields) {
     super(fields);
     this.litPrivateKey = fields?.litPrivateKey;
     this.litNetwork = fields?.litNetwork || LIT_NETWORK.DatilDev;
-    if (this.litPrivateKey === undefined) {
-      throw new Error(
-        `No Lit private key found. Pass a private key as "litPrivateKey".`
-      );
-    }
+    this.litNodeClient = fields?.litNodeClient;
   }
 
   protected async _call(
-    input: string,
+    input: z.infer<typeof this.schema>,
     _runManager?: CallbackManagerForToolRun
   ): Promise<string> {
     // do something with lit
-    return "success";
+    return JSON.stringify({
+      signedData: input.input,
+      litPkpPublicKey: input.litPkpPublicKey,
+      signature:
+        "0x473b31ac5e3aa07c57d6bd968bd62fb119ea349d677f9339a97d4dce39d43feb",
+    });
     //   throw new Error(
     //     `Request failed with status code ${response.status}: ${json.error}`
     //   );

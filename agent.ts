@@ -10,7 +10,7 @@ import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { StateGraph, MessagesAnnotation } from "@langchain/langgraph";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { Lit } from "./lit.js";
+import { LitToolkit } from "./litToolkit.js";
 import { LIT_NETWORK } from "@lit-protocol/constants";
 import * as readline from "readline/promises";
 
@@ -40,13 +40,11 @@ const weatherTool = tool(
     }),
   }
 );
-const tools = [
-  weatherTool,
-  new Lit({
-    litNetwork: LIT_NETWORK.DatilDev,
-    litPrivateKey: process.env.LIT_LANGCHAIN_PRIVATE_KEY,
-  }),
-];
+const litToolkit = await LitToolkit.create({
+  litNetwork: LIT_NETWORK.DatilDev,
+  litPrivateKey: process.env.LIT_LANGCHAIN_PRIVATE_KEY,
+});
+const { tools } = litToolkit;
 const toolNode = new ToolNode(tools);
 
 // Create a model and give it access to the tools
